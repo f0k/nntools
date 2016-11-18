@@ -88,10 +88,11 @@ class TestUpdateFunctions(object):
                     'beta2': 0.999,
                     'epsilon': 1e-8}],
         ])
-    def test_update_returntype(self, method, kwargs):
-        '''Checks whether lasagne.updates handles float32 inputs correctly'''
+    @pytest.mark.parametrize('dtype', ['float32', 'float16'])
+    def test_update_returntype(self, method, kwargs, dtype):
+        '''Checks whether lasagne.updates preserves dtypes correctly'''
         floatX_ = theano.config.floatX
-        theano.config.floatX = 'float32'
+        theano.config.floatX = dtype
         try:
             A = theano.shared(lasagne.utils.floatX([1, 1, 1]))
             B = theano.shared(lasagne.utils.floatX([1, 1, 1]))
@@ -100,16 +101,16 @@ class TestUpdateFunctions(object):
                                   [A, B],
                                   **kwargs)
 
-            assert all(v.dtype == 'float32' for v in updates)
+            assert all(v.dtype == dtype for v in updates)
 
-            # Checking for float32 arguments
+            # Checking for numpy arguments (instead of Python floats)
             for param in kwargs:
-                kwargs[param] = np.float32(kwargs[param])
+                kwargs[param] = lasagne.utils.floatX(kwargs[param])
             updates = update_func(self.f(A) + self.f(B),
                                   [A, B],
                                   **kwargs)
 
-            assert all(v.dtype == 'float32' for v in updates)
+            assert all(v.dtype == dtype for v in updates)
         finally:
             theano.config.floatX = floatX_
 

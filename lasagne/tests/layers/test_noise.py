@@ -61,10 +61,11 @@ class TestDropoutLayer:
         assert 0.9 < result_eval.mean() < 1.1
         assert (numpy.round(numpy.unique(result_eval), 2) == [0., 1.25]).all()
 
-    def test_get_output_for_p_float32(self, input_layer):
+    @pytest.mark.parametrize('dtype', [np.float32, np.float16])
+    def test_get_output_for_p_float(self, input_layer, dtype):
         from lasagne.layers.noise import DropoutLayer
-        layer = DropoutLayer(input_layer, p=numpy.float32(0.5))
-        input = theano.shared(numpy.ones((100, 100), dtype=numpy.float32))
+        layer = DropoutLayer(input_layer, p=dtype(0.5))
+        input = theano.shared(numpy.ones((100, 100), dtype=dtype))
         assert layer.get_output_for(input).dtype == input.dtype
 
     @pytest.mark.parametrize("shared_axes", [(), (0,), (2, 3), (-1, -2)])
