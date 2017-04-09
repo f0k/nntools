@@ -7,6 +7,10 @@
 
    sigmoid
    softmax
+   Softmax
+   softmax_per_location
+   softmax_over_locations
+   spatial_softmax
    tanh
    ScaledTanH
    rectify
@@ -25,6 +29,11 @@ Detailed description
 
 .. autofunction:: sigmoid
 .. autofunction:: softmax
+.. autoclass:: Softmax
+   :members:
+.. autofunction:: softmax_per_location
+.. autofunction:: softmax_over_locations
+.. autofunction:: spatial_softmax
 .. autofunction:: tanh
 .. autoclass:: ScaledTanH
    :members:

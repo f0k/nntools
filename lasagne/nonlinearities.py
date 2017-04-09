@@ -3,7 +3,10 @@
 Non-linear activation functions for artificial neurons.
 """
 
+import operator
+
 import theano.tensor
+import numpy as np
 
 
 # sigmoid
@@ -33,15 +36,143 @@ def softmax(x):
 
     Parameters
     ----------
-    x : float32
-        The activation (the summed, weighted input of a neuron).
+    x : symbolic 2D tensor
+        Logits with instances in rows and classes in columns.
 
     Returns
     -------
-    float32 where the sum of the row is 1 and each single value is in [0, 1]
-        The output of the softmax function applied to the activation.
+    symbolic 2D tensor
+        Probability distributions over columns for each row: rows sum to 1.0
+        and each value is in range [0,1], interpretable as a probability.
+
+    See also
+    --------
+    Softmax: class for a softmax on higher-order tensors, with custom axes
+    softmax_per_location: Instance with ``axes=1`` (across channels)
+    softmax_over_locations: Instance with ``axes='locations'`` (per channel)
+    spatial_softmax: Alias for :func:`softmax_per_location`    
     """
+    if x.ndim != 2:
+        raise ValueError("softmax() requires a 2D tensor, got a %d tensor "
+                         "instead. See the Softmax class, spatial_softmax or "
+                         "softmax_over_locations for alternatives." % x.ndim)
     return theano.tensor.nnet.softmax(x)
+
+
+# softmax (custom axes)
+class Softmax(object):
+    """
+    Softmax activation function across given axes
+
+    Parameters
+    ----------
+    axes : int, tuple of int or 'locations'
+        The axes to apply the softmax over, such that the outputs over these
+        axes can be interpreted as a probability distribution across classes.
+        If `'locations'`, uses all axes except the first two.
+
+    Methods
+    -------
+    __call__(x)
+        Apply the softmax function to the activation `x`.
+
+    Examples
+    --------
+    In contrast to most other activation functions in this module, this is
+    a class that needs to be instantiated to obtain a callable:
+
+    >>> from lasagne.layers import InputLayer, Conv2DLayer
+    >>> l_in = InputLayer((None, 1, 30, 50))
+    >>> from lasagne.nonlinearities import Softmax
+    >>> spatial_softmax = Softmax(axes=(2, 3))
+    >>> l1 = DenseLayer(l_in, num_units=5, nonlinearity=spatial_softmax)
+
+    See also
+    --------
+    softmax: softmax across the second axis of a 2D tensor
+    softmax_per_location: Instance with ``axes=1`` (across channels)
+    softmax_over_locations: Instance with ``axes='locations'`` (per channel)
+    spatial_softmax: Alias for :func:`softmax_per_location`
+    """
+
+    def __init__(self, axes):
+        if isinstance(axes, int):
+            axes = (axes,)
+        elif not isinstance(axes, tuple) and axes != 'locations':
+            raise ValueError("axes must be int, tuple of int, or 'locations',"
+                             " got %r instead" % axes)
+        self.axes = axes
+
+    def __call__(self, x):
+        # determine axes to softmax over
+        if self.axes == 'locations':
+            axes = tuple(range(2, x.ndim))
+        else:
+            axes = tuple(ax if ax >= 0 else x.ndim - ax for ax in self.axes)
+            axes = tuple(sorted(set(axes)))
+        if len(axes) == 0:
+            raise ValueError("there are no axes for the softmax with "
+                             "axes=%r and input dimensionality %d" %
+                             (axes, x.ndim))
+        elif any(ax < 0 or ax >= x.ndim for ax in axes):
+            raise ValueError("axes=%r outside valid range for input "
+                             "dimensionality %d" % (axes, x.ndim))
+
+        # dimshuffle softmax axes to the end, if needed
+        other_axes = tuple(ax for ax in range(x.ndim) if ax not in axes)
+        pattern = other_axes + axes
+        if pattern != tuple(range(x.ndim)):
+            x = x.dimshuffle(pattern)
+
+        # flatten or expand to two dimensions, if needed
+        if not len(other_axes) == len(axes) == 1:
+            shape = x.shape  # for later restoration
+            if len(axes) == 1:
+                x = x.reshape((-1, x.shape[x.ndim - 1]))
+            else:
+                x = x.reshape(
+                        (reduce(operator.mul, x.shape[:len(other_axes)]), -1))
+
+        # apply softmax
+        x = theano.tensor.nnet.softmax(x)
+
+        # unflatten, if needed
+        if not len(other_axes) == len(axes) == 1:
+            x = x.reshape(shape)
+
+        # restore axis order, if needed
+        if pattern != tuple(range(x.ndim)):
+            anti_pattern = tuple(np.argsort(pattern))
+            x = x.dimshuffle(anti_pattern)
+
+        return x
+
+
+softmax_per_location = Softmax(axes=1)  # shortcut for softmax across channels
+softmax_per_location.__doc__ = """softmax_per_location(x)
+
+    Instance of :class:`Softmax` with ``axes=1``
+
+    This is useful for segmentation tasks, to obtain a probability
+    distribution over channels for each location. In other words, there is a
+    separate classification decision per location, with channels representing
+    the classes.
+    """
+
+
+softmax_over_locations = Softmax(axes='locations')
+softmax_over_locations.__doc__ = """softmax_over_locations(x)
+
+    Instance of :class:`Softmax` with ``axes='locations'``
+
+    This is useful for keypoint detection tasks, to obtain a probability
+    distribution over the spatial locations for each channel. In other words,
+    there is a separate classification decision per channel, with spatial
+    locations representing the possible outcomes.
+    """
+
+
+spatial_softmax = softmax_per_location  # alias for spatial softmax
 
 
 # tanh
